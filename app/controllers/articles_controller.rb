@@ -4,4 +4,9 @@ class ArticlesController < ApplicationController
       page(params[:page]).per(params[:per_page])
     render json: @articles
   end
+
+  def show
+    @articles = Article.find(params[:id])
+    render json: @articles
+  end
 end
