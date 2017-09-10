@@ -3,4 +3,5 @@ class User < ApplicationRecord
   validates :uid, uniqueness: { scope: :provider }
 
   has_one :token, dependent: :destroy
+  has_many :articles, dependent: :destroy
 end
