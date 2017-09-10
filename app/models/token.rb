@@ -1,5 +1,5 @@
 class Token < ApplicationRecord
-  belongs_to :user, dependent: :destroy
+  belongs_to :user
   validates :token, presence: true
   validates :token, uniqueness: true
 
