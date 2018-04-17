@@ -233,7 +233,7 @@ describe ArticlesController do
 
         it 'should have no content' do
           put :update, params: valid_article_attributes.merge(id: article.id)
-          expect(response.body).to be_empty
+          expect(response.body).to be_nil
         end
 
         it 'should update article attributes' do

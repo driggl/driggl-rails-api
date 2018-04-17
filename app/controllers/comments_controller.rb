@@ -10,21 +10,26 @@ class CommentsController < ApplicationController
   end
 
   def create
-    @comment = Comment.new(comment_params)
+    raise AccessDeniedError if @article.user != current_user
+    @comment = @article.comments.build(comment_params)
 
     if @comment.save
-      render json: @comment, status: :created, location: @comment
+      render json: @comment, status: :created, location: @article
     else
-      render json: @comment.errors, status: :unprocessable_entity
+      render json: @comment, adapter: :json_api,
+        serializer: ActiveModel::Serializer::ErrorSerializer,
+        status: :unprocessable_entity
     end
   end
 
   private
-    def set_article
-      @article = Article.find(params[:article_id])
-    end
 
-    def comment_params
-      params.require(:comment).permit(:content, :article_id, :user_id)
-    end
+  def set_article
+    @article = Article.find(params[:article_id])
+  end
+
+  def comment_params
+    h = params[:data]&.[](:attributes) || ActionController::Parameters.new
+    h.merge(user_id: current_user.id).permit(:content, :user_id)
+  end
 end

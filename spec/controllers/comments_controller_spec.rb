@@ -45,37 +45,127 @@ RSpec.describe CommentsController, type: :controller do
   end
 
   describe "POST #create" do
-    let(:valid_attributes) {
-      skip("Add a hash of attributes valid for your model")
-    }
+    context 'when user is not authorized' do
+      let(:authorization_error) {
+        {
+          "status" => "401",
+          "source" => { "pointer" => "/code" },
+          "title" =>  "Authorization failed",
+          "detail" => "The code parameter or authorization header is invalid"
+        }
+      }
+      let(:article) { create :article }
 
-    let(:invalid_attributes) {
-      skip("Add a hash of attributes invalid for your model")
-    }
-
-    context "with valid params" do
-      it "creates a new Comment" do
-        expect {
-          post :create, params: {comment: valid_attributes}, session: valid_session
-        }.to change(Comment, :count).by(1)
+      it 'should return 401 http status' do
+        post :create, params: { article_id: article.id }
+        expect(response).to have_http_status(:unauthorized)
       end
 
-      it "renders a JSON response with the new comment" do
+      it 'should return error info in the response body' do
+        post :create, params: { article_id: article.id }
+        expect(json['errors'].length).to eq(1)
+        expect(json['errors'][0]).to eq(authorization_error)
+      end
 
-        post :create, params: {comment: valid_attributes}, session: valid_session
-        expect(response).to have_http_status(:created)
-        expect(response.content_type).to eq('application/json')
-        expect(response.location).to eq(comment_url(Comment.last))
+      it 'should not create the article' do
+        expect{ post :create, params: { article_id: article.id } }.not_to change{ Comment.count }
+      end
+    end
+
+    context 'when user is authorized' do
+      let(:user) { create :user }
+      let(:token) { create :token, user: user }
+      let(:valid_attributes) {
+        { data: { attributes: { content: "Sample comment" } } }
+      }
+
+      before { request.headers['authorization'] = "Bearer #{token.token}" }
+
+      context 'when trying to add comment to owned article' do
+        let(:article) { create :article, user: user }
+
+        context "with valid params" do
+          it 'should return 201 status code' do
+            post :create, params: valid_attributes.merge(article_id: article.id)
+            expect(response).to have_http_status(:created)
+          end
+
+          it "creates a new Comment" do
+            expect {
+              post :create, params: valid_attributes.merge(article_id: article.id)
+            }.to change(Comment, :count).by(1)
+          end
+
+          it "renders a JSON response with the new comment" do
+            post :create, params: valid_attributes.merge(article_id: article.id)
+            expect(json['data']['attributes']).to eq({
+              'content' => 'Sample comment'
+            })
+            comment = Comment.last
+            expect(comment.article).to eq(article)
+            expect(comment.user).to eq(user)
+            expect(comment.content).to eq('Sample comment')
+          end
+        end
+
+        context "with invalid params" do
+          let(:invalid_attributes) { { data: { attributes: { content: "" } } } }
+          let(:article) { create :article, user: user }
+
+          it "renders a JSON response with errors for the new comment" do
+            post :create, params: invalid_attributes.merge(article_id: article.id)
+            expect(response).to have_http_status(:unprocessable_entity)
+          end
+
+          it 'should not create a comment' do
+            expect{
+              post :create, params: invalid_attributes.merge(article_id: article.id)
+            }.not_to change{ Comment.count }
+          end
+
+          it 'should have proper error message in the body' do
+            post :create, params: invalid_attributes.merge(article_id: article.id)
+            expect(json['errors'].length).to eq(1)
+            expect(json['errors']).to contain_exactly(
+              {
+                'source' => { 'pointer' => '/data/attributes/content' },
+                'detail' => "can't be blank"
+              }
+            )
+          end
+        end
+      end
+
+      context "when trying to add comment o other's user article" do
+        let(:forbidden_error) {
+          {
+            "status" => "403",
+            "source" => { "pointer" => "/code" },
+            "title" =>  "Access denied",
+            "detail" => "You have no rights to access this resource."
+          }
+        }
+
+        let(:other_article) { create :article }
+
+        it 'should return 403 status code' do
+          post :create, params: valid_attributes.merge(article_id: other_article.id)
+          expect(response).to have_http_status(:forbidden)
+        end
+
+        it 'should return error information in response body' do
+          post :create, params: valid_attributes.merge(article_id: other_article.id)
+          expect(json['errors'][0]).to eq(forbidden_error)
+        end
+
+        it 'should not create comment for not owned artile' do
+          expect{
+            post :create, params: valid_attributes.merge(article_id: other_article.id)
+          }.not_to change{ Comment.count }
+        end
+
       end
     end
 
-    context "with invalid params" do
-      it "renders a JSON response with errors for the new comment" do
-
-        post :create, params: {comment: invalid_attributes}, session: valid_session
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.content_type).to eq('application/json')
-      end
-    end
   end
 end
